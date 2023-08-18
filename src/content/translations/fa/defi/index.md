@@ -4,7 +4,6 @@ description: نگاهی کلی بر امور مالی غیرمتمرکز بر پ
 lang: fa
 template: use-cases
 emoji: ":money_with_wings:"
-sidebar: true
 image: ../../../../assets/use-cases/defi.png
 alt: لوگوی اتر ساخته‌شده از آجرهای لگو.
 sidebarDepth: 2
@@ -333,13 +332,12 @@ DeFi یک جنبش متن‌باز است. پروتکل‌ها و برنامه�
 
 ### داده‌های DeFi {#defi-data}
 
-- [DeFi Pulse](https://defipulse.com/)
 - [DeFi Prime](https://defiprime.com/)
 - [DeFi Llama](https://defillama.com/)
+- [نرخ DeFi](https://defirate.com/)
 
 ### مقاله‌های DeFi {#defi-articles}
 
-- [امور مالی غیرمتمرکز چیست؟](https://docs.ethhub.io/built-on-ethereum/open-finance/what-is-open-finance/) - _ETHHub، به‌طور منظم به‌روز می‌شود_
 - [راهنمای DeFi برای مبتدیان](https://blog.coinbase.com/a-beginners-guide-to-decentralized-finance-defi-574c68ff43c4) – _Sid Coelho-Prabhu،‏ 6 ژانویه 2020_
 
 ### ویدیوها {#videos}

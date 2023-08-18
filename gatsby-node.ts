@@ -7,9 +7,10 @@ import { createFilePath } from "gatsby-source-filesystem"
 import type { GatsbyNode } from "gatsby"
 
 import type { Context } from "./src/types"
-import type { AllMdxQuery } from "./src/interfaces"
 
-import mergeTranslations from "./src/scripts/mergeTranslations"
+import * as Schema from "./src/schema"
+
+import createLocales from "./src/scripts/createLocales"
 import copyContributors from "./src/scripts/copyContributors"
 
 import {
@@ -17,10 +18,16 @@ import {
   defaultLanguage,
   Lang,
 } from "./src/utils/languages"
-import getMessages from "./src/utils/getMessages"
+import { IS_DEV } from "./src/utils/env"
 import redirects from "./redirects.json"
 
 const exec = util.promisify(child_process.exec)
+
+const commonRedirectProps = {
+  isPermanent: true,
+  ignoreCase: true,
+  force: true,
+}
 
 /**
  * Markdown isOutdated check
@@ -30,7 +37,7 @@ const exec = util.promisify(child_process.exec)
  * @param {string} filePath filepath for translated mdx file
  * @returns boolean for if file is outdated or not
  */
-const checkIsMdxOutdated = (filePath) => {
+const checkIsMdxOutdated = (filePath: string): boolean => {
   const dirname = path.resolve("./")
   const splitPath = filePath.split(dirname)
   const tempSplitPath = splitPath[1]
@@ -74,7 +81,10 @@ const checkIsMdxOutdated = (filePath) => {
  * @param {*} lang language abbreviation for language path
  * @returns {{isOutdated: boolean, isContentEnglish: boolean}}
  */
-const checkIsPageOutdated = async (urlPath, lang) => {
+const checkIsPageOutdated = async (
+  urlPath: string,
+  lang: Lang
+): Promise<{ isOutdated: boolean; isContentEnglish: boolean }> => {
   // Files that need index appended on the end. Ex page-index.json, page-developers-index.json, page-upgrades-index.json
   const indexFilePaths = ["", "developers", "upgrades"]
   const filePath = urlPath.split("/").filter((text) => text !== "")
@@ -88,12 +98,15 @@ const checkIsPageOutdated = async (urlPath, lang) => {
 
   const joinedFilepath = filePath.join("-")
   const srcPath = path.resolve(`src/intl/${lang}/page-${joinedFilepath}.json`)
-  const englishPath = path.resolve(`src/intl/en/page-${joinedFilepath}.json`)
+  const englishPath = path.resolve(
+    `src/intl/${defaultLanguage}/page-${joinedFilepath}.json`
+  )
 
   // If no file exists, default to english
   if (!fs.existsSync(srcPath)) {
     return {
-      isOutdated: true,
+      // Consider always defaultLanguage paths as updated
+      isOutdated: lang !== defaultLanguage,
       isContentEnglish: true,
     }
   } else {
@@ -137,11 +150,9 @@ const checkIsPageOutdated = async (urlPath, lang) => {
 
 // Loops through all the files dictated by Gatsby (building pages folder), as well as
 // folders flagged through the gatsby-source-filesystem plugin in gatsby-config
-export const onCreateNode: GatsbyNode["onCreateNode"] = async ({
-  node,
-  getNode,
-  actions,
-}) => {
+export const onCreateNode: GatsbyNode<{
+  fileAbsolutePath: string
+}>["onCreateNode"] = async ({ node, getNode, actions }) => {
   const { createNodeField } = actions
 
   // Edit markdown nodes
@@ -151,9 +162,6 @@ export const onCreateNode: GatsbyNode["onCreateNode"] = async ({
 
     if (slug.includes("/translations/")) {
       slug = slug.replace("/translations", "")
-      const split = slug.split("/")
-      split.splice(1, 1)
-
       isOutdated = await checkIsMdxOutdated(node.fileAbsolutePath)
     } else {
       slug = `/${defaultLanguage}${slug}`
@@ -191,28 +199,27 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
 }) => {
   const { createPage, createRedirect } = actions
 
+  // custom redirects defined in `redirects.json`
   redirects.forEach((redirect) => {
     createRedirect({
+      ...commonRedirectProps,
       ...redirect,
-      isPermanent: true,
-      ignoreCase: true,
-      force: true,
     })
   })
 
-  const result = await graphql<{ allMdx: { edges: Array<AllMdxQuery> } }>(`
-    query getAllMdx {
+  const { data, errors } = await graphql<Queries.AllMdxQuery>(`
+    query AllMdx {
       allMdx {
         edges {
           node {
             fields {
-              isOutdated
               slug
               relativePath
             }
             frontmatter {
               lang
               template
+              isOutdated
             }
           }
         }
@@ -220,16 +227,20 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
     }
   `)
 
-  if (result.errors) {
+  if (errors) {
     reporter.panicOnBuild('🚨  ERROR: Loading "createPages" query')
   }
 
   // For all markdown nodes, create a page
-  result.data.allMdx.edges.filter(({ node }) => {
-    const slug = node.fields.slug
+  data?.allMdx.edges.filter(({ node }) => {
+    const slug = node.fields?.slug
+
+    if (!slug) {
+      throw new Error(`Missing 'slug' node property.`)
+    }
 
     // Set template of markdown files
-    const nodeTemplate = node.frontmatter.template
+    const nodeTemplate = node.frontmatter?.template
     let template = nodeTemplate ? nodeTemplate : `static`
     if (slug.includes(`/tutorials/`)) {
       template = `tutorial`
@@ -243,16 +254,25 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
       slug.includes(`/terms-of-use/`) ||
       slug.includes(`/contributing/`) ||
       slug.includes(`/style-guide/`)
-    const language = node.frontmatter.lang as Lang
+    const language = node.frontmatter?.lang as Lang
     if (!language) {
       throw `Missing 'lang' frontmatter property. All markdown pages must have a lang property. Page slug: ${slug}`
     }
     const relativePath = node.fields.relativePath
+    if (!relativePath) {
+      throw new Error(`Missing 'relativePath' node property.`)
+    }
 
     // If markdown file is English, check for corresponding file in each language.
     // e.g. English file: "src/content/community/index.md"
     // e.g. corresponding German file: "src/content/translations/de/community/index.md"
     if (language === defaultLanguage) {
+      createRedirect({
+        ...commonRedirectProps,
+        fromPath: slug.slice(3),
+        toPath: slug,
+      })
+
       for (const lang of supportedLanguages) {
         const splitPath = relativePath.split("/")
         splitPath.splice(2, 0, `translations/${lang}`)
@@ -262,26 +282,28 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
           const splitSlug = slug.split("/")
           splitSlug.splice(1, 1, lang)
           const langSlug = splitSlug.join("/")
-          createPage({
+          createPage<Context>({
             path: langSlug,
-            component: path.resolve(`src/templates/${template}.js`),
+            component: path.resolve(`src/templates/${template}.tsx`),
             context: {
+              language: lang,
+              languagesToFetch: [lang],
               slug: langSlug,
               ignoreTranslationBanner: isLegal,
               isLegal: isLegal,
               isOutdated: false,
               isContentEnglish: true,
-              relativePath: relativePath, // Use English path for template MDX query
-              // Create `intl` object so `gatsby-plugin-intl` will skip
-              // generating language variations for this page
-              intl: {
+              relativePath, // Use English path for template MDX query
+              isDefaultLang: lang === defaultLanguage,
+              // gatsby i18n plugin
+              i18n: {
                 language: lang,
-                defaultLanguage,
                 languages: supportedLanguages,
-                messages: getMessages("./src/intl/", lang),
+                defaultLanguage: defaultLanguage,
+                generateDefaultLanguagePage: false,
                 routed: true,
-                originalPath: slug.substr(3),
-                redirect: false,
+                originalPath: langSlug.slice(3),
+                path: langSlug,
               },
             },
           })
@@ -291,21 +313,23 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
 
     createPage<Context>({
       path: slug,
-      component: path.resolve(`src/templates/${template}.js`),
+      component: path.resolve(`src/templates/${template}.tsx`),
       context: {
+        language,
+        languagesToFetch: [language],
         slug,
-        isOutdated: node.fields.isOutdated,
-        relativePath: relativePath,
-        // Create `intl` object so `gatsby-plugin-intl` will skip
-        // generating language variations for this page
-        intl: {
+        isOutdated: !!node.frontmatter?.isOutdated,
+        isDefaultLang: language === defaultLanguage,
+        relativePath,
+        // gatsby i18n plugin
+        i18n: {
           language,
-          defaultLanguage,
           languages: supportedLanguages,
-          messages: getMessages("./src/intl/", language),
+          defaultLanguage,
+          generateDefaultLanguagePage: false,
           routed: true,
-          originalPath: slug.substr(3),
-          redirect: false,
+          originalPath: slug.slice(3),
+          path: slug,
         },
       },
     })
@@ -317,6 +341,14 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
   // we can remove this logic and the `/pages-conditional/` directory.
   const outdatedMarkdown = [`eth`, `dapps`, `wallets`, `what-is-ethereum`]
   outdatedMarkdown.forEach((page) => {
+    const originalPath = `/${page}/`
+
+    createRedirect({
+      ...commonRedirectProps,
+      fromPath: originalPath,
+      toPath: `/${defaultLanguage}${originalPath}`,
+    })
+
     supportedLanguages.forEach(async (lang) => {
       const markdownPath = path.resolve(
         `src/content/translations/${lang}/${page}/index.md`
@@ -328,26 +360,27 @@ export const createPages: GatsbyNode<any, Context>["createPages"] = async ({
           page,
           lang
         )
-        createPage({
-          path: `/${lang}/${page}/`,
-          component: path.resolve(
-            page === "wallets"
-              ? `src/pages-conditional/${page}/index.js`
-              : `src/pages-conditional/${page}.js`
-          ),
+        const slug = `/${lang}${originalPath}`
+        createPage<Context>({
+          path: slug,
+          component: path.resolve(`src/pages-conditional/${page}.tsx`),
           context: {
-            slug: `/${lang}/${page}/`,
-            intl: {
+            language: lang,
+            languagesToFetch: [lang],
+            slug,
+            isContentEnglish,
+            isOutdated,
+            isDefaultLang: lang === defaultLanguage,
+            // gatsby i18n plugin
+            i18n: {
               language: lang,
               languages: supportedLanguages,
               defaultLanguage,
-              messages: getMessages("./src/intl/", lang),
+              generateDefaultLanguagePage: false,
               routed: true,
-              originalPath: `/${page}/`,
-              redirect: false,
+              originalPath,
+              path: slug,
             },
-            isContentEnglish,
-            isOutdated,
           },
         })
       }
@@ -362,83 +395,103 @@ export const onCreatePage: GatsbyNode<any, Context>["onCreatePage"] = async ({
   page,
   actions,
 }) => {
-  const { createPage, deletePage } = actions
+  const { createPage, deletePage, createRedirect } = actions
+  const rootPath = page.path.slice(3)
+  const is404Page = rootPath.match(/^\/404(\/|.html)$/)
 
-  const isTranslated = page.context.language !== defaultLanguage
-  const hasNoContext = page.context.isOutdated === undefined
+  if (!page.context) {
+    return
+  }
 
-  if (isTranslated && hasNoContext) {
+  // these are the native Gatsby pages (those living under `/pages`)
+  // which do not pass through the `createPages` hook thus they don't have our
+  // custom context in them
+  const isPageWithoutCustomContext = page.context.isOutdated === undefined
+
+  if (isPageWithoutCustomContext) {
+    const { language, i18n } = page.context
+    const isDefaultLang = language === defaultLanguage
+
+    // as we don't have our custom context for this page, we calculate & add it
+    // later to them
     const { isOutdated, isContentEnglish } = await checkIsPageOutdated(
-      page.context.intl.originalPath,
-      page.context.language
+      i18n.originalPath,
+      language
     )
-    deletePage(page)
-    createPage<Context>({
+
+    let newPage = {
       ...page,
       context: {
         ...page.context,
-        isOutdated,
-        //display TranslationBanner for translation-component pages that are still in English
+        languagesToFetch: [language],
+        // hide the outdated content banner for 404 pages
+        isOutdated: is404Page ? false : isOutdated,
+        // display TranslationBanner for translation-component pages that are still in English
         isContentEnglish,
+        isDefaultLang,
       },
-    })
+    }
+
+    // there seems to be a bug in the i18n plugin where 404 pages get a
+    // duplicated `/lang` in their `matchPath`s
+    if (newPage.matchPath?.includes(`/${language}/${language}/*`)) {
+      newPage = { ...newPage, matchPath: `/${language}/*` }
+    }
+
+    // on dev, we will have 2 pages for the default lang
+    // - 1 for the ones with the prefix `/{defaultLang}/learn/`
+    // - 1 for the ones without the prefix `/learn/`
+    //   we do this to avoid having a 404 on those without the prefix since in
+    //   dev we don't have the redirects from the server
+    deletePage(page)
+
+    if (IS_DEV) {
+      createPage<Context>(newPage)
+    }
+
+    // `routed` means that the page have the lang prefix on the url
+    // e.g. `/en/learn` or `/en`
+    if (!IS_DEV && i18n.routed) {
+      createPage<Context>(newPage)
+
+      if (isDefaultLang && !is404Page) {
+        createRedirect({
+          ...commonRedirectProps,
+          fromPath: rootPath,
+          toPath: page.path,
+        })
+      }
+    }
   }
+}
+
+export const onPostBootstrap: GatsbyNode["onPostBootstrap"] = ({ actions }) => {
+  const { createRedirect } = actions
+
+  supportedLanguages.forEach((lang) => {
+    createRedirect({
+      ...commonRedirectProps,
+      fromPath: `/${lang}/*`,
+      toPath: `/${lang}/404`,
+      statusCode: 404,
+      force: false,
+    })
+  })
 }
 
 export const createSchemaCustomization: GatsbyNode["createSchemaCustomization"] =
   ({ actions }) => {
     const { createTypes } = actions
-    const typeDefs = `
-    type Mdx implements Node {
-      frontmatter: Frontmatter
-    }
-    type Frontmatter {
-      sidebar: Boolean
-      sidebarDepth: Int
-      incomplete: Boolean
-      template: String
-      summaryPoint1: String!
-      summaryPoint2: String!
-      summaryPoint3: String!
-      summaryPoint4: String!
-      position: String
-      compensation: String
-      location: String
-      type: String
-      link: String
-      address: String
-      skill: String
-      published: String
-      sourceUrl: String
-      source: String
-      author: String
-      tags: [String]
-      isOutdated: Boolean
-    }
-    type ConsensusBountyHuntersCsv implements Node {
-      username: String,
-      name: String,
-      score: Int
-    }
-     type ExecutionBountyHuntersCsv implements Node {
-      username: String,
-      name: String,
-      score: Int
-    }
-  `
-    createTypes(typeDefs)
+    const { sdls } = Schema
 
-    // Optimization. Ref: https://www.gatsbyjs.com/docs/scaling-issues/#switch-off-type-inference-for-sitepagecontext
-    createTypes(`
-    type SitePage implements Node @dontInfer {
-      path: String!
-    }
-  `)
+    createTypes([...Object.keys(sdls).map((sdlKey) => sdls[sdlKey])])
   }
 
-export const onPreBootstrap: GatsbyNode["onPreBootstrap"] = ({ reporter }) => {
-  mergeTranslations()
-  reporter.info(`Merged translations saved`)
+export const onPreBootstrap: GatsbyNode["onPreBootstrap"] = async ({
+  reporter,
+}) => {
+  await createLocales()
+  reporter.info(`Created locales`)
   copyContributors()
   reporter.info(`Contributors copied`)
 }
@@ -449,7 +502,7 @@ export const onPostBuild: GatsbyNode["onPostBuild"] = async (
 ) => {
   const { reporter } = gatsbyNodeHelpers
 
-  const reportOut = (report) => {
+  const reportOut = (report: { stderr: string; stdout: string }) => {
     const { stderr, stdout } = report
     if (stderr) reporter.error(stderr)
     if (stdout) reporter.info(stdout)

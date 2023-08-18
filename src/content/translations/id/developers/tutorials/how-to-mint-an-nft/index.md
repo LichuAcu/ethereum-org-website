@@ -8,9 +8,8 @@ tags:
   - "Alchemy"
   - "Solidity"
   - "kontrak pintar"
-skill: pemula
+skill: beginner
 lang: id
-sidebar: true
 published: 2021-04-22
 ---
 
@@ -119,7 +118,7 @@ Sekarang, untuk berinteraksi dengan kontrak kita, kita perlu membuat instance-ny
 
 Dalam contoh di atas, akun kontrak kita adalah 0x81c587EB0fE773404c42c1d2666b5f557C470eED.
 
-Selanjutnya, kita akan menggunakan [metode kontrak](https://web3js.readthedocs.io/en/v1.2.0/web3-eth-contract.html?highlight=constructor#web3-eth-contract) web3 untuk membuat kontrak kita menggunakan ABI dan alamat. Dalam berkas mint-nft.js Anda, tambahkan berikut ini:
+Selanjutnya, kita akan menggunakan [metode kontrak](https://docs.web3js.org/api/web3-eth-contract/class/Contract) web3 untuk membuat kontrak kita menggunakan ABI dan alamat. Dalam berkas mint-nft.js Anda, tambahkan berikut ini:
 
 ```js
 const contractAddress = "0x81c587EB0fE773404c42c1d2666b5f557C470eED"
@@ -129,7 +128,7 @@ const nftContract = new web3.eth.Contract(contract.abi, contractAddress)
 
 ## Langkah 6: Perbarui berkas .env {#update-env}
 
-Sekarang, untuk membuat dan mengirim transaksi ke rantai Ethereum, kita akan menggunakan alamat akun ethereum publik Anda untuk mendapatkan nonce akun (akan dijelaskan di bawah).
+Sekarang, untuk membuat dan mengirim transaksi ke rantai Ethereum, kita akan menggunakan alamat akun Ethereum publik Anda untuk mendapatkan nonce akun (akan dijelaskan di bawah).
 
 Tambahkan kunci publik Anda ke berkas .env Anda — Jika Anda menyelesaikan bagian 1 dari tutorial, berkas .env kita seharusnya sekarang tampak seperti ini:
 

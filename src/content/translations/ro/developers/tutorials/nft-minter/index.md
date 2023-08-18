@@ -12,9 +12,8 @@ tags:
   - "UI"
   - "wallet (portofel)"
   - "Pinata"
-skill: intermediar
-lang: en
-sidebar: true
+skill: intermediate
+lang: ro
 published: 2021-10-06
 ---
 
@@ -613,7 +612,7 @@ REACT_APP_PINATA_SECRET = <pinata-secret>
 REACT_APP_ALCHEMY_KEY = https://eth-ropsten.alchemyapi.io/v2/<alchemy-key>
 ```
 
-Now that we have our contract ABI and our Alchemy API key, we're ready to load our smart contract using[ Alchemy Web3](https://github.com/alchemyplatform/alchemy-web3).
+Now that we have our contract ABI and our Alchemy API key, we're ready to load our smart contract using [Alchemy Web3](https://github.com/alchemyplatform/alchemy-web3).
 
 ### Set up your Alchemy Web3 endpoint and contract {#setup-alchemy-endpoint}
 
@@ -633,7 +632,7 @@ const { createAlchemyWeb3 } = require("@alch/alchemy-web3")
 const web3 = createAlchemyWeb3(alchemyKey)
 ```
 
-[Alchemy Web3](https://github.com/alchemyplatform/alchemy-web3) is a wrapper around [Web3.js](https://web3js.readthedocs.io/en/v1.2.9/), providing enhanced API methods and other crucial benefits to make your life as a web3 developer easier. It is designed to require minimal configuration so you can start using it in your app right away!
+[Alchemy Web3](https://github.com/alchemyplatform/alchemy-web3) is a wrapper around [Web3.js](https://docs.web3js.org/), providing enhanced API methods and other crucial benefits to make your life as a web3 developer easier. It is designed to require minimal configuration so you can start using it in your app right away!
 
 Next, let's add our contract ABI and contract address to our file.
 

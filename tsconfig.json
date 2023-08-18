@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "lib": ["dom", "esnext"],
+    "lib": ["dom", "esnext", "dom.iterable"],
     "jsx": "react",
     "module": "esnext",
     "moduleResolution": "node",
@@ -12,5 +12,18 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["./src"]
+  "include": [
+    "./src/**/*",
+    "./plugins/**/*",
+    "./gatsby-node.ts",
+    "./gatsby-config.ts",
+    "./overrides.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "./src/content",
+    "./src/intl",
+    "./src/data",
+    "./src/assets"
+  ]
 }
